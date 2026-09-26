@@ -1,0 +1,11 @@
+Historias de Usuario Asignadas:
+HU02: Crear Solicitud
+Descripción: Como solicitante, quiero crear una solicitud para pedir soporte.
+Criterios de aceptación mínimos: Título, descripción y categoría obligatorios; se genera ID único, fecha, estado Nuevo y propietario.
+Puntos: 5
+Sprint objetivo: 1
+HU03: Consultar Solicitudes
+Descripción: Como solicitante, quiero consultar mis solicitudes para conocer su estado.
+Criterios de aceptación mínimos: Lista solo las solicitudes propias; permite abrir el detalle; muestra el estado actual y la última actualización.
+Puntos: 3
+Sprint objetivo: 1
