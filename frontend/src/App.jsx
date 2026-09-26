@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { LifeBuoy, UserRound } from 'lucide-react';
 import TicketForm from './components/TicketForm';
+import TicketList from './components/TicketList';
 import './App.css';
 
 // Usuario autenticado (Sprint 1: sesión simulada, se reemplaza por HU01).
@@ -9,6 +11,12 @@ const CURRENT_USER = {
 };
 
 export default function App() {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleTicketCreated = () => {
+    setRefreshKey((key) => key + 1);
+  };
+
   return (
     <>
       <header className="app-header">
@@ -37,7 +45,11 @@ export default function App() {
 
       <main className="app-main">
         <div className="app-layout">
-          <TicketForm userId={CURRENT_USER.id} />
+          <TicketForm
+            userId={CURRENT_USER.id}
+            onTicketCreated={handleTicketCreated}
+          />
+          <TicketList userId={CURRENT_USER.id} refreshKey={refreshKey} />
         </div>
       </main>
     </>
