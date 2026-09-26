@@ -18,12 +18,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ============================================================================
 // Sesión simulada del Sprint 1
-// ----------------------------------------------------------------------------
-// HU01 (login real) vive en la rama feature/EXP01-Sprint1-HU01-HU04-Auth.
-// Mientras ambas ramas no se fusionen, el frontend envía un alias de sesión
-// ("user-123") en la cabecera x-user-id y aquí lo traducimos al id real de la
-// tabla usuarios, porque solicitudes.propietario_id es un UUID.
-// ELIMINAR este mapa cuando HU01 entregue el id real en la sesión.
+// "user-123" -> id real de usuarios; borrar cuando entre la HU01.
 // ============================================================================
 const SESION_SIMULADA = {
   'user-123': '3a46c322-3093-4900-b5c9-46710fa245ba', // solicitante@test.com
@@ -46,13 +41,7 @@ function rechazarSinUsuario(res) {
 
 // ============================================================================
 // Normalización de fechas
-// ----------------------------------------------------------------------------
-// Supabase guarda `fecha` como "timestamp without time zone" con valores UTC y
-// SIN sufijo de zona: "2026-09-26T03:37:54.102544". La especificación de
-// JavaScript dice que una fecha sin offset se interpreta como HORA LOCAL, así
-// que en un equipo UTC-5 esa marca se leía 5 horas adelantada y un día más.
-// Se devuelve el MISMO instante con la marca UTC explícita, para que tanto la
-// UI del Solicitante como el PanelCoordinador (HU04) lo interpreten bien.
+// Supabase guarda UTC sin sufijo de zona; sin la Z, JS lo lee como hora local.
 // ============================================================================
 const FECHA_SIN_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
 
@@ -69,15 +58,7 @@ const normalizarFila = (fila) =>
 
 // ============================================================================
 // Tokens de sesión firmados con HMAC-SHA256
-// ----------------------------------------------------------------------------
-// Antes el token era base64 del payload, sin firmar: cualquiera podía
-// fabricarse {"rol":"Coordinador"} a mano y el middleware lo aceptaba. Ahora el
-// payload va firmado con un secreto que solo existe en el servidor, así que
-// modificar cualquier campo invalida la firma.
-//
-// El secreto sale de .env (TOKEN_SECRET). Si no está definido se usa la clave
-// de Supabase como respaldo para que el servidor arranque igual; conviene
-// definir TOKEN_SECRET propio en produccion.
+// Secreto en .env (TOKEN_SECRET), con la clave de Supabase como respaldo.
 // ============================================================================
 const TOKEN_SECRET =
   process.env.TOKEN_SECRET || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -140,10 +121,8 @@ const verificarCoordinador = (req, res, next) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body || {};
 
-  // Respuesta UNICA para toda credencial invalida: mismo status y mismo texto
-  // tanto si el correo no existe como si la contrasena es incorrecta. Si
-  // respondieramos distinto, un atacante podria averiguar que usuarios estan
-  // registrados probando correos uno por uno (enumeracion de usuarios).
+  // Misma respuesta si el correo no existe y si la contraseña es incorrecta,
+  // para que no se puedan enumerar los usuarios registrados.
   const credencialesInvalidas = () =>
     res.status(401).json({ error: 'Credenciales inválidas' });
 
@@ -234,10 +213,7 @@ app.post('/api/solicitudes', async (req, res) => {
 });
 
 // ============================================================================
-// GET /api/solicitudes — dos lecturas sobre la misma ruta:
-//   · HU03 (Solicitante): cabecera x-user-id  → solo las solicitudes propias.
-//   · HU04 (Coordinador): cabecera Authorization con token de rol → todas.
-// Así no se pisan los dos requerimientos al fusionar ramas.
+// GET /api/solicitudes · HU03 con x-user-id, HU04 con Authorization
 // ============================================================================
 const listarTodas = async (req, res) => {
   const { sortBy = 'fecha', order = 'desc' } = req.query;
