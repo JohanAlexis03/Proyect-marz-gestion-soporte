@@ -35,7 +35,14 @@ export default function TicketDetail({ ticket, onClose }) {
       ref={dialogRef}
       className="detail"
       aria-labelledby="detail-title"
-      onClose={onClose}
+      onCancel={(event) => {
+        // Escape pide cerrar: lo interceptamos para que el cierre nativo no
+        // rebote en onClose. La limpieza del effect cierra el diálogo y, si
+        // estuviera enganchado a onClose, StrictMode desmontaría el detalle
+        // nada más de abrirlo.
+        event.preventDefault();
+        onClose();
+      }}
       onClick={handleBackdrop}
     >
       <div className="detail__panel">
