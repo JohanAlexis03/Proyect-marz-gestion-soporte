@@ -6,7 +6,7 @@ import { categoriaClase, estadoClase } from '../utils/badges';
 import TicketDetail from './TicketDetail';
 import './TicketList.css';
 
-export default function TicketList({ userId, refreshKey }) {
+export default function TicketList({ refreshKey }) {
   const [tickets, setTickets] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [reloadKey, setReloadKey] = useState(0);
@@ -22,14 +22,15 @@ export default function TicketList({ userId, refreshKey }) {
   };
 
   useEffect(() => {
-    if (!userId) return undefined;
+    const token = localStorage.getItem('token');
+    if (!token) return undefined;
 
     let cancelled = false;
 
     (async () => {
       try {
         const res = await fetch(API_SOLICITUDES, {
-          headers: { 'x-user-id': userId },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!res.ok) {
@@ -56,7 +57,7 @@ export default function TicketList({ userId, refreshKey }) {
     return () => {
       cancelled = true;
     };
-  }, [userId, refreshKey, reloadKey]);
+  }, [refreshKey, reloadKey]);
 
   const total = tickets.length;
 

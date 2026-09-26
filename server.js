@@ -17,28 +17,6 @@ const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ============================================================================
-// Sesión simulada del Sprint 1
-// "user-123" -> id real de usuarios; borrar cuando entre la HU01.
-// ============================================================================
-const SESION_SIMULADA = {
-  'user-123': '3a46c322-3093-4900-b5c9-46710fa245ba', // solicitante@test.com
-};
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function resolverPropietario(xUserId) {
-  if (!xUserId) return null;
-  if (UUID_RE.test(xUserId)) return xUserId; // llega el id real de Supabase
-  return SESION_SIMULADA[xUserId] || null; // llega un alias de sesión
-}
-
-function rechazarSinUsuario(res) {
-  return res.status(401).json({
-    error: 'Usuario no identificado: falta o no es válida la cabecera x-user-id.',
-  });
-}
 
 // ============================================================================
 // Normalización de fechas
@@ -93,9 +71,12 @@ const verificarToken = (token) => {
 };
 
 // ============================================================================
-// Middleware: Protección de rol Coordinador (HU01 / HU04)
+// Middleware de sesión (HU01 / HU02 / HU03 / HU04)
+// La identidad sale SIEMPRE del token firmado. La cabecera x-user-id se
+// elimino: la ponia quien llamaba y permitia consultar o crear a nombre
+// de cualquier usuario solo con adivinar su id.
 // ============================================================================
-const verificarCoordinador = (req, res, next) => {
+const verificarSesion = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
     return res.status(401).json({ error: 'No autorizado: Token no proporcionado' });
@@ -108,13 +89,20 @@ const verificarCoordinador = (req, res, next) => {
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 
-  if (decoded.rol !== 'Coordinador') {
-    return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Coordinador' });
-  }
-
   req.usuario = decoded;
   next();
 };
+
+// ============================================================================
+// Middleware: Protección de rol Coordinador (HU01 / HU04)
+// ============================================================================
+const verificarCoordinador = (req, res, next) =>
+  verificarSesion(req, res, () => {
+    if (req.usuario.rol !== 'Coordinador') {
+      return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Coordinador' });
+    }
+    next();
+  });
 
 // ============================================================================
 // HU01: Endpoint de Login simple
@@ -163,13 +151,13 @@ app.post('/api/login', async (req, res) => {
 
 // ============================================================================
 // HU02: Crear una solicitud de soporte
-// Cabecera requerida: x-user-id
+// Requiere sesión: el propietario sale del token, nunca de la cabecera.
 // ============================================================================
 const CATEGORIAS_VALIDAS = ['Hardware', 'Software', 'Redes'];
 
-app.post('/api/solicitudes', async (req, res) => {
-  const propietarioId = resolverPropietario(req.headers['x-user-id']);
-  if (!propietarioId) return rechazarSinUsuario(res);
+app.post('/api/solicitudes', verificarSesion, async (req, res) => {
+  const propietarioId = req.usuario.id;
+  if (!propietarioId) return res.status(401).json({ error: 'Token sin identidad de usuario.' });
 
   const { titulo, categoria, descripcion } = req.body || {};
 
@@ -216,7 +204,7 @@ app.post('/api/solicitudes', async (req, res) => {
 });
 
 // ============================================================================
-// GET /api/solicitudes · HU03 con x-user-id, HU04 con Authorization
+// GET /api/solicitudes · HU03 las propias, HU04 todas; el rol viene del token
 // ============================================================================
 const listarTodas = async (req, res) => {
   const { sortBy = 'fecha', order = 'desc' } = req.query;
@@ -241,15 +229,12 @@ const listarTodas = async (req, res) => {
   }
 };
 
-const listarPropias = async (req, res) => {
-  const propietarioId = resolverPropietario(req.headers['x-user-id']);
-  if (!propietarioId) return rechazarSinUsuario(res);
-
+const listarPropias = async (idPropietario, res) => {
   try {
     const { data, error } = await supabase
       .from('solicitudes')
       .select('*')
-      .eq('propietario_id', propietarioId)
+      .eq('propietario_id', idPropietario)
       .order('fecha', { ascending: false }); // más recientes primero
 
     if (error) {
@@ -262,11 +247,11 @@ const listarPropias = async (req, res) => {
   }
 };
 
-app.get('/api/solicitudes', (req, res, next) => {
-  if (req.headers.authorization) {
-    return verificarCoordinador(req, res, () => listarTodas(req, res)); // HU04
-  }
-  return listarPropias(req, res); // HU03
+// El rol del token decide qué ve: Coordinador ve todas (HU04),
+// cualquier otro solo las suyas (HU03).
+app.get('/api/solicitudes', verificarSesion, (req, res) => {
+  if (req.usuario.rol === 'Coordinador') return listarTodas(req, res); // HU04
+  return listarPropias(req.usuario.id, res); // HU03
 });
 
 // ============================================================================

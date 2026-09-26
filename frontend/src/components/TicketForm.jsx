@@ -7,7 +7,7 @@ const CATEGORIES = ['Hardware', 'Software', 'Redes'];
 
 const INITIAL_FORM = { titulo: '', categoria: '', descripcion: '' };
 
-export default function TicketForm({ userId, onTicketCreated }) {
+export default function TicketForm({ onTicketCreated }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,11 +34,12 @@ export default function TicketForm({ userId, onTicketCreated }) {
     setSuccess('');
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(API_SOLICITUDES, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': userId,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           titulo: titulo.trim(),

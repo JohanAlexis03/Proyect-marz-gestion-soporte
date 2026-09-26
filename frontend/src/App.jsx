@@ -72,11 +72,8 @@ function SolicitanteShell() {
 
       <main className="app-main">
         <div className="app-layout">
-          <TicketForm
-            userId={usuario?.id}
-            onTicketCreated={handleTicketCreated}
-          />
-          <TicketList userId={usuario?.id} refreshKey={refreshKey} />
+          <TicketForm onTicketCreated={handleTicketCreated} />
+          <TicketList refreshKey={refreshKey} />
         </div>
       </main>
     </>
