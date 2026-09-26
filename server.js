@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { verificarContrasena } = require('./password');
 
 const app = express();
 // Puerto 4000: el 5000 lo ocupa el receptor AirPlay de macOS.
@@ -141,7 +142,9 @@ app.post('/api/login', async (req, res) => {
       return credencialesInvalidas();
     }
 
-    if (password !== usuario.contrasena) {
+    // Nunca se compara como texto plano: el valor guardado es un hash scrypt.
+    const coincide = await verificarContrasena(password, usuario.contrasena);
+    if (!coincide) {
       return credencialesInvalidas();
     }
 
