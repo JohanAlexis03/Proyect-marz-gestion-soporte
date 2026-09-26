@@ -32,9 +32,11 @@ export default function Login() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('usuario', JSON.stringify(data.usuario));
 
-      // Redirección según rol
+      // Redireccion segun rol
       if (data.usuario.rol === 'Coordinador') {
         navigate('/coordinador');
+      } else if (data.usuario.rol === 'Solicitante') {
+        navigate('/');
       } else {
         navigate('/otro-rol');
       }

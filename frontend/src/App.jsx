@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { LifeBuoy, LogOut, UserRound } from 'lucide-react';
 import Login from './components/Login';
@@ -8,16 +8,20 @@ import TicketForm from './components/TicketForm';
 import TicketList from './components/TicketList';
 import './App.css';
 
-// Usuario autenticado (Sprint 1: sesion simulada, se reemplaza por HU01).
-const CURRENT_USER = {
-  id: 'user-123',
-  role: 'Solicitante',
-};
+// Sesion real que guarda HU01 en localStorage (id, email, rol).
+function leerUsuario() {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || 'null');
+  } catch {
+    return null;
+  }
+}
 
 // Vista del Solicitante: HU02 (crear) + HU03 (consultar).
 function SolicitanteShell() {
   const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
+  const usuario = leerUsuario();
 
   const handleTicketCreated = () => {
     setRefreshKey((key) => key + 1);
@@ -25,7 +29,8 @@ function SolicitanteShell() {
 
   const handleCerrarSesion = () => {
     localStorage.clear();
-    navigate('/login');
+    // replace: no dejar esta vista en el historial para que Atras no regrese.
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -48,8 +53,8 @@ function SolicitanteShell() {
                 <UserRound size={18} strokeWidth={2} />
               </span>
               <span className="app-user__meta">
-                <span className="app-user__id">{CURRENT_USER.id}</span>
-                <span className="app-user__role">{CURRENT_USER.role}</span>
+                <span className="app-user__id">{usuario?.email}</span>
+                <span className="app-user__role">{usuario?.rol}</span>
               </span>
             </div>
 
@@ -68,10 +73,10 @@ function SolicitanteShell() {
       <main className="app-main">
         <div className="app-layout">
           <TicketForm
-            userId={CURRENT_USER.id}
+            userId={usuario?.id}
             onTicketCreated={handleTicketCreated}
           />
-          <TicketList userId={CURRENT_USER.id} refreshKey={refreshKey} />
+          <TicketList userId={usuario?.id} refreshKey={refreshKey} />
         </div>
       </main>
     </>
@@ -109,6 +114,17 @@ function VistaOtroRol() {
 }
 
 export default function App() {
+  // El navegador guarda paginas cerradas (bfcache) y puede devolver el estado
+  // viejo al pulsar Atras/Adelante, sin volver a montar React. Recargamos para
+  // que RutaProtegida vuelva a comprobar la sesion.
+  useEffect(() => {
+    const handlePageshow = (evento) => {
+      if (evento.persisted) window.location.reload();
+    };
+    window.addEventListener('pageshow', handlePageshow);
+    return () => window.removeEventListener('pageshow', handlePageshow);
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
@@ -128,8 +144,15 @@ export default function App() {
         {/* Vista para los demas roles autenticados */}
         <Route path="/otro-rol" element={<VistaOtroRol />} />
 
-        {/* HU02 + HU03: vista por defecto del Solicitante */}
-        <Route path="/" element={<SolicitanteShell />} />
+        {/* HU02 + HU03: vista del Solicitante, restringida a su rol (HU01) */}
+        <Route
+          path="/"
+          element={
+            <RutaProtegida rolPermitido="Solicitante">
+              <SolicitanteShell />
+            </RutaProtegida>
+          }
+        />
 
         {/* Cualquier otra ruta vuelve al Solicitante */}
         <Route path="*" element={<Navigate to="/" replace />} />
