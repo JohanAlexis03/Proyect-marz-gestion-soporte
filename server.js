@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -67,6 +68,49 @@ const normalizarFila = (fila) =>
   fila && fila.fecha ? { ...fila, fecha: conMarcaUTC(fila.fecha) } : fila;
 
 // ============================================================================
+// Tokens de sesión firmados con HMAC-SHA256
+// ----------------------------------------------------------------------------
+// Antes el token era base64 del payload, sin firmar: cualquiera podía
+// fabricarse {"rol":"Coordinador"} a mano y el middleware lo aceptaba. Ahora el
+// payload va firmado con un secreto que solo existe en el servidor, así que
+// modificar cualquier campo invalida la firma.
+//
+// El secreto sale de .env (TOKEN_SECRET). Si no está definido se usa la clave
+// de Supabase como respaldo para que el servidor arranque igual; conviene
+// definir TOKEN_SECRET propio en produccion.
+// ============================================================================
+const TOKEN_SECRET =
+  process.env.TOKEN_SECRET || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+
+const firmarToken = (payload) => {
+  const cuerpo = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const firma = crypto.createHmac('sha256', TOKEN_SECRET).update(cuerpo).digest('base64url');
+  return `${cuerpo}.${firma}`;
+};
+
+// Devuelve el payload solo si la firma es válida; null en cualquier otro caso.
+const verificarToken = (token) => {
+  if (typeof token !== 'string') return null;
+  const punto = token.lastIndexOf('.');
+  if (punto <= 0) return null;
+
+  const cuerpo = token.slice(0, punto);
+  const firma = token.slice(punto + 1);
+  const esperada = crypto.createHmac('sha256', TOKEN_SECRET).update(cuerpo).digest('base64url');
+
+  // Comparación en tiempo constante para no filtrar la firma por tardanza.
+  const a = Buffer.from(firma);
+  const b = Buffer.from(esperada);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  try {
+    return JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf-8'));
+  } catch {
+    return null;
+  }
+};
+
+// ============================================================================
 // Middleware: Protección de rol Coordinador (HU01 / HU04)
 // ============================================================================
 const verificarCoordinador = (req, res, next) => {
@@ -75,50 +119,60 @@ const verificarCoordinador = (req, res, next) => {
     return res.status(401).json({ error: 'No autorizado: Token no proporcionado' });
   }
 
-  try {
-    // Manejo de token simple en base64 para evitar dependencias extra
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  const decoded = verificarToken(token);
 
-    if (decoded.rol !== 'Coordinador') {
-      return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Coordinador' });
-    }
-
-    req.usuario = decoded;
-    next();
-  } catch (err) {
+  if (!decoded) {
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
+
+  if (decoded.rol !== 'Coordinador') {
+    return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Coordinador' });
+  }
+
+  req.usuario = decoded;
+  next();
 };
 
 // ============================================================================
 // HU01: Endpoint de Login simple
 // ============================================================================
 app.post('/api/login', async (req, res) => {
-  const { email } = req.body;
+  const { email, password } = req.body || {};
 
-  if (!email) {
-    return res.status(400).json({ error: 'Credenciales inválidas' });
+  // Respuesta UNICA para toda credencial invalida: mismo status y mismo texto
+  // tanto si el correo no existe como si la contrasena es incorrecta. Si
+  // respondieramos distinto, un atacante podria averiguar que usuarios estan
+  // registrados probando correos uno por uno (enumeracion de usuarios).
+  const credencialesInvalidas = () =>
+    res.status(401).json({ error: 'Credenciales inválidas' });
+
+  if (typeof email !== 'string' || !email.trim() || typeof password !== 'string') {
+    return credencialesInvalidas();
   }
 
   try {
     const { data: usuario, error } = await supabase
       .from('usuarios')
-      .select('id, email, rol')
+      .select('id, email, rol, contrasena')
       .eq('email', email.trim().toLowerCase())
       .single();
 
     if (error || !usuario) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      return credencialesInvalidas();
     }
 
-    // Generamos un token base64 simple con id, email y rol
-    const token = Buffer.from(JSON.stringify(usuario)).toString('base64');
+    if (password !== usuario.contrasena) {
+      return credencialesInvalidas();
+    }
+
+    // La contraseña jamas sale del servidor.
+    const { contrasena, ...seguro } = usuario;
 
     return res.json({
       mensaje: 'Autenticación exitosa',
-      token,
-      usuario,
+      token: firmarToken(seguro),
+      usuario: seguro,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Error interno en el servidor' });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LifeBuoy, UserRound } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { LifeBuoy, LogOut, UserRound } from 'lucide-react';
 import Login from './components/Login';
 import PanelCoordinador from './components/PanelCoordinador';
 import RutaProtegida from './components/RutaProtegida';
@@ -17,9 +17,15 @@ const CURRENT_USER = {
 // Vista del Solicitante: HU02 (crear) + HU03 (consultar).
 function SolicitanteShell() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const navigate = useNavigate();
 
   const handleTicketCreated = () => {
     setRefreshKey((key) => key + 1);
+  };
+
+  const handleCerrarSesion = () => {
+    localStorage.clear();
+    navigate('/login');
   };
 
   return (
@@ -36,14 +42,25 @@ function SolicitanteShell() {
             </div>
           </div>
 
-          <div className="app-user">
-            <span className="app-user__avatar" aria-hidden="true">
-              <UserRound size={18} strokeWidth={2} />
-            </span>
-            <span className="app-user__meta">
-              <span className="app-user__id">{CURRENT_USER.id}</span>
-              <span className="app-user__role">{CURRENT_USER.role}</span>
-            </span>
+          <div className="app-header__actions">
+            <div className="app-user">
+              <span className="app-user__avatar" aria-hidden="true">
+                <UserRound size={18} strokeWidth={2} />
+              </span>
+              <span className="app-user__meta">
+                <span className="app-user__id">{CURRENT_USER.id}</span>
+                <span className="app-user__role">{CURRENT_USER.role}</span>
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="app-header__logout"
+              onClick={handleCerrarSesion}
+            >
+              <LogOut size={16} strokeWidth={2} />
+              <span>Cerrar sesión</span>
+            </button>
           </div>
         </div>
       </header>
