@@ -1,3 +1,5 @@
 ﻿Historia,Título,Descripción,Criterios de aceptación mínimos,Puntos,Sprint
+HU01,Iniciar Sesión,"Como usuario, quiero iniciar sesión para acceder solo a las funciones de mi rol.","Credenciales válidas permiten acceso; inválidas no revelan si el usuario existe; la sesión puede cerrarse; un usuario no puede acceder a funciones de otro rol.",5,1
 HU02,Crear Solicitud,"Como solicitante, quiero crear una solicitud para pedir soporte.","Título, descripción y categoría obligatorios; se genera ID único, fecha, estado Nuevo y propietario.",5,1
 HU03,Consultar Solicitudes,"Como solicitante, quiero consultar mis solicitudes para conocer su estado.","Lista solo las solicitudes propias; permite abrir el detalle; muestra el estado actual y la última actualización.",3,1
+HU04,Priorizar Solicitudes,"Como coordinador, quiero priorizar solicitudes para ordenar la atención.","Prioridad válida; cambio trazable; lista ordenable por prioridad, estado, fecha; solo coordinador modifica.",3,1
