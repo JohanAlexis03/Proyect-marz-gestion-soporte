@@ -50,7 +50,7 @@ export default function Login() {
   return (
     <div className="login-box">
       <h2>Iniciar Sesión (HU01)</h2>
-      
+  
       {error && <div className="error-msg">{error}</div>}
 
       <form onSubmit={handleLogin}>
