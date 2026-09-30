@@ -204,20 +204,46 @@ app.post('/api/solicitudes', verificarSesion, async (req, res) => {
 });
 
 // ============================================================================
-// GET /api/solicitudes · HU03 las propias, HU04 todas; el rol viene del token
+// HU03 / HU04 / HU09: Listar, Buscar y Filtrar Solicitudes
 // ============================================================================
-const listarTodas = async (req, res) => {
-  const { sortBy = 'fecha', order = 'desc' } = req.query;
+app.get('/api/solicitudes', verificarSesion, async (req, res) => {
+  const { texto, estado, prioridad, categoria, sortBy = 'fecha', order = 'desc' } = req.query;
 
   const camposPermitidos = ['prioridad', 'estado', 'fecha'];
   const campoOrden = camposPermitidos.includes(sortBy) ? sortBy : 'fecha';
   const esAscendente = String(order).toLowerCase() === 'asc';
 
   try {
-    const { data, error } = await supabase
-      .from('solicitudes')
-      .select('*')
-      .order(campoOrden, { ascending: esAscendente });
+    let query = supabase.from('solicitudes').select('*');
+
+    // Lógica de permisos (Crucial):
+    // Si el usuario es "Solicitante", se filtra obligatoriamente por su id (propietario_id).
+    // Si es Coordinador o Agente, puede ver todas.
+    if (req.usuario.rol === 'Solicitante') {
+      query = query.eq('propietario_id', req.usuario.id);
+    }
+
+    // Búsqueda por texto (coincidencia parcial en titulo o descripcion usando ilike)
+    if (texto && typeof texto === 'string' && texto.trim()) {
+      const limpio = texto.trim();
+      query = query.or('titulo.ilike.%' + limpio + '%,descripcion.ilike.%' + limpio + '%');
+    }
+
+    // Filtros combinados consistentes
+    if (estado) {
+      query = query.eq('estado', estado);
+    }
+    if (prioridad) {
+      query = query.eq('prioridad', prioridad);
+    }
+    if (categoria) {
+      query = query.eq('categoria', categoria);
+    }
+
+    // Ordenamiento
+    query = query.order(campoOrden, { ascending: esAscendente });
+
+    const { data, error } = await query;
 
     if (error) {
       return res.status(500).json({ error: 'Error al consultar solicitudes: ' + error.message });
@@ -227,31 +253,6 @@ const listarTodas = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: 'Error interno en el servidor' });
   }
-};
-
-const listarPropias = async (idPropietario, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('solicitudes')
-      .select('*')
-      .eq('propietario_id', idPropietario)
-      .order('fecha', { ascending: false }); // más recientes primero
-
-    if (error) {
-      return res.status(500).json({ error: 'Error al consultar solicitudes: ' + error.message });
-    }
-
-    return res.json(normalizarFechas(data || []));
-  } catch (err) {
-    return res.status(500).json({ error: 'Error interno en el servidor' });
-  }
-};
-
-// El rol del token decide qué ve: Coordinador ve todas (HU04),
-// cualquier otro solo las suyas (HU03).
-app.get('/api/solicitudes', verificarSesion, (req, res) => {
-  if (req.usuario.rol === 'Coordinador') return listarTodas(req, res); // HU04
-  return listarPropias(req.usuario.id, res); // HU03
 });
 
 // ============================================================================
@@ -320,6 +321,229 @@ app.patch('/api/solicitudes/:id/prioridad', verificarCoordinador, async (req, re
     return res.json({
       mensaje: 'Prioridad actualizada con éxito',
       solicitud: normalizarFila(solicitudActualizada),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// ============================================================================
+// HU05: Asignar Agente a una Solicitud
+// ============================================================================
+
+// Endpoint para que el frontend liste los agentes disponibles
+app.get('/api/agentes', verificarSesion, async (req, res) => {
+  try {
+    const { data: agentes, error } = await supabase
+      .from('usuarios')
+      .select('id, email, rol')
+      .eq('rol', 'Agente');
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al consultar agentes: ' + error.message });
+    }
+
+    return res.json(agentes || []);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// PUT /api/solicitudes/:id/asignar
+app.put('/api/solicitudes/:id/asignar', verificarSesion, async (req, res) => {
+  const { id } = req.params;
+  const { agente_id } = req.body;
+
+  if (!agente_id) {
+    return res.status(400).json({ error: 'Debes seleccionar un agente válido.' });
+  }
+
+  try {
+    const asignado_por = req.usuario.id;
+
+    const { data, error } = await supabase
+      .from('solicitudes')
+      .update({
+        agente_id: agente_id,
+        asignado_por: asignado_por,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al asignar el agente: ' + error.message });
+    }
+
+    return res.json({
+      mensaje: 'Agente asignado exitosamente',
+      solicitud: normalizarFila(data),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// ============================================================================
+// HU06: Comentarios de Trabajo
+// ============================================================================
+
+// POST /api/comentarios
+app.post('/api/comentarios', verificarSesion, async (req, res) => {
+  const { solicitud_id, contenido } = req.body;
+  const autor_id = req.usuario.id;
+
+  if (!contenido || typeof contenido !== 'string' || !contenido.trim()) {
+    return res.status(400).json({ error: 'El contenido del comentario no puede estar vacío.' });
+  }
+
+  if (!solicitud_id) {
+    return res.status(400).json({ error: 'El ID de la solicitud es obligatorio.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('comentarios')
+      .insert({
+        solicitud_id: solicitud_id,
+        autor_id: autor_id,
+        contenido: contenido.trim(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al registrar comentario: ' + error.message });
+    }
+
+    return res.status(201).json({
+      mensaje: 'Comentario guardado exitosamente',
+      comentario: data,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// GET /api/solicitudes/:id/comentarios
+app.get('/api/solicitudes/:id/comentarios', verificarSesion, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from('comentarios')
+      .select('*')
+      .eq('solicitud_id', id)
+      .order('fecha_creacion', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al obtener comentarios: ' + error.message });
+    }
+
+    return res.json(data || []);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// ============================================================================
+// HU10: Dashboard de Indicadores (Solo Coordinador)
+// Métricas agregadas de volumen por estado y tiempo mediano de ciclo en JS puro.
+// Regla: CERO métricas que expongan rendimiento individual de agentes.
+// ============================================================================
+app.get('/api/indicadores', verificarCoordinador, async (req, res) => {
+  const { estado, prioridad, categoria } = req.query;
+
+  try {
+    let query = supabase.from('solicitudes').select('*');
+
+    // Lógica de filtros opcionales
+    if (estado) query = query.eq('estado', estado);
+    if (prioridad) query = query.eq('prioridad', prioridad);
+    if (categoria) query = query.eq('categoria', categoria);
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al consultar indicadores: ' + error.message });
+    }
+
+    const solicitudes = data || [];
+    const total = solicitudes.length;
+
+    // 1. Volumen de solicitudes agrupadas por estado
+    const volumenPorEstado = {
+      'Nuevo': 0,
+      'En Progreso': 0,
+      'Resuelto': 0,
+      'Cerrado': 0,
+    };
+
+    for (let i = 0; i < solicitudes.length; i++) {
+      const est = solicitudes[i].estado || 'Nuevo';
+      if (volumenPorEstado[est] !== undefined) {
+        volumenPorEstado[est]++;
+      } else {
+        volumenPorEstado[est] = 1;
+      }
+    }
+
+    // 2. Tiempo mediano de ciclo (diferencia entre creación y resolución)
+    const tiemposHoras = [];
+
+    for (let i = 0; i < solicitudes.length; i++) {
+      const sol = solicitudes[i];
+      // Solo consideramos solicitudes que ya se resolvieron o cerraron
+      if (sol.estado === 'Resuelto' || sol.estado === 'Cerrado') {
+        const fechaInicio = new Date(sol.fecha);
+        let fechaFin = null;
+
+        // Buscar fecha de resolución en el historial
+        if (Array.isArray(sol.historial)) {
+          for (let j = 0; j < sol.historial.length; j++) {
+            const h = sol.historial[j];
+            const accion = (h.accion || '').toLowerCase();
+            if (accion.includes('resuelto') || accion.includes('resuelta') || accion.includes('cerrad')) {
+              fechaFin = new Date(h.fecha);
+              break;
+            }
+          }
+          // Si no hay texto explícito de resuelto, usamos la fecha del último movimiento
+          if (!fechaFin && sol.historial.length > 0) {
+            const ultimo = sol.historial[sol.historial.length - 1];
+            if (ultimo.fecha) fechaFin = new Date(ultimo.fecha);
+          }
+        }
+
+        if (!fechaFin && sol.fecha_resolucion) {
+          fechaFin = new Date(sol.fecha_resolucion);
+        }
+
+        if (fechaFin && !isNaN(fechaInicio.getTime()) && !isNaN(fechaFin.getTime())) {
+          const diffMs = fechaFin.getTime() - fechaInicio.getTime();
+          const horas = Math.max(0, Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10);
+          tiemposHoras.push(horas);
+        }
+      }
+    }
+
+    // Cálculo manual de la mediana en JavaScript puro
+    let tiempoMedianoHoras = 0;
+    if (tiemposHoras.length > 0) {
+      tiemposHoras.sort((a, b) => a - b);
+      const mitad = Math.floor(tiemposHoras.length / 2);
+      if (tiemposHoras.length % 2 !== 0) {
+        tiempoMedianoHoras = tiemposHoras[mitad];
+      } else {
+        tiempoMedianoHoras = Math.round(((tiemposHoras[mitad - 1] + tiemposHoras[mitad]) / 2) * 10) / 10;
+      }
+    }
+
+    return res.json({
+      total,
+      volumenPorEstado,
+      tiempoMedianoHoras,
+      resueltas: (volumenPorEstado['Resuelto'] || 0) + (volumenPorEstado['Cerrado'] || 0),
     });
   } catch (err) {
     return res.status(500).json({ error: 'Error interno en el servidor' });

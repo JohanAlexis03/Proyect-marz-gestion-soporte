@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import TicketDetail from './TicketDetail';
+import BuscadorFiltros from './BuscadorFiltros';
+import DashboardIndicadores from './DashboardIndicadores';
 
 const API_BASE = '/api';
 
 export default function PanelCoordinador() {
   const [solicitudes, setSolicitudes] = useState([]);
+  const [solicitudSeleccionada, setSolicitudSeleccionada] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [mensajeExito, setMensajeExito] = useState('');
@@ -123,6 +127,12 @@ export default function PanelCoordinador() {
       {error && <div className="error-msg">{error}</div>}
       {mensajeExito && <div className="success-msg">{mensajeExito}</div>}
 
+      {/* HU10: Dashboard de Indicadores (Solo Coordinador) */}
+      <DashboardIndicadores />
+
+      {/* HU09: Buscador y Filtros */}
+      <BuscadorFiltros onBuscar={(resultados) => setSolicitudes(resultados)} />
+
       {/* Barra de Controles y Ordenamiento */}
       <div className="toolbar">
         <h3>Listado General de Solicitudes</h3>
@@ -172,6 +182,7 @@ export default function PanelCoordinador() {
               <th>Prioridad (En Vivo)</th>
               <th>Fecha</th>
               <th>Historial</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -180,7 +191,15 @@ export default function PanelCoordinador() {
               return (
                 <tr key={sol.id}>
                   <td style={{ fontSize: '11px', wordBreak: 'break-all' }}>{sol.id}</td>
-                  <td><strong>{sol.titulo}</strong></td>
+                  <td>
+                    <strong
+                      style={{ cursor: 'pointer', color: '#2563eb' }}
+                      title="Clic para ver detalle"
+                      onClick={() => setSolicitudSeleccionada(sol)}
+                    >
+                      {sol.titulo}
+                    </strong>
+                  </td>
                   <td>{sol.descripcion}</td>
                   <td>{sol.categoria || 'General'}</td>
                   <td>{sol.estado}</td>
@@ -203,11 +222,39 @@ export default function PanelCoordinador() {
                       {textoHistorial}
                     </div>
                   </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => setSolicitudSeleccionada(sol)}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        fontWeight: '500',
+                      }}
+                    >
+                      Ver Detalle
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      )}
+
+      {/* Modal de Detalle (HU03, HU05, HU06) */}
+      {solicitudSeleccionada && (
+        <TicketDetail
+          ticket={solicitudSeleccionada}
+          onClose={() => {
+            setSolicitudSeleccionada(null);
+            cargarSolicitudes();
+          }}
+        />
       )}
     </div>
   );
