@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { History, X } from 'lucide-react';
 import { formatFecha, formatFechaCorta } from '../utils/fecha';
 import { categoriaClase, estadoClase } from '../utils/badges';
+import AsignarAgente from './AsignarAgente';
+import ComentariosTrabajo from './ComentariosTrabajo';
 import './TicketDetail.css';
 
 export default function TicketDetail({ ticket, onClose }) {
@@ -121,6 +123,16 @@ export default function TicketDetail({ ticket, onClose }) {
               ))}
             </ol>
           )}
+        </section>
+
+        {/* HU05: Asignar agente a la solicitud */}
+        <section className="detail__section">
+          <AsignarAgente solicitudId={ticket.id} agenteActualId={ticket.agente_id} />
+        </section>
+
+        {/* HU06: Comentarios de trabajo */}
+        <section className="detail__section">
+          <ComentariosTrabajo solicitudId={ticket.id} />
         </section>
       </div>
     </dialog>
