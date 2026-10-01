@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import TicketDetail from './TicketDetail';
 
 const API_BASE = '/api';
 
@@ -8,12 +9,20 @@ export default function PanelCoordinador() {
   const [error, setError] = useState('');
   const [mensajeExito, setMensajeExito] = useState('');
 
+  // HU05: el detalle es el único lugar donde vive el formulario de asignación,
+  // y al Coordinador antes no había manera de abrirlo desde acá.
+  const [detalleId, setDetalleId] = useState(null);
+
   // Parámetros de ordenamiento
   const [sortBy, setSortBy] = useState('fecha');
   const [order, setOrder] = useState('desc');
 
   const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
   const token = localStorage.getItem('token');
+
+  // Se deriva de la lista para que, al cambiar un estado o asignar un agente,
+  // el detalle refresque en vez de quedar con la copia vieja.
+  const detalle = solicitudes.find((s) => s.id === detalleId) || null;
 
   // Cargar solicitudes con ordenamiento
   const cargarSolicitudes = async () => {
@@ -231,6 +240,7 @@ export default function PanelCoordinador() {
               <th>Prioridad (En Vivo)</th>
               <th>Fecha</th>
               <th>Historial</th>
+              <th>Detalle</th>
             </tr>
           </thead>
           <tbody>
@@ -258,16 +268,25 @@ export default function PanelCoordinador() {
                   <td>
                     {sol.fecha ? new Date(sol.fecha).toLocaleDateString() : 'N/A'}
                   </td>
-                  <td>
-                    <div className="historial-cell" title={textoHistorial}>
-                      {textoHistorial}
-                    </div>
-                  </td>
-                </tr>
+                    <td>
+                      <div className="historial-cell" title={textoHistorial}>
+                        {textoHistorial}
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn-detalle"
+                        onClick={() => setDetalleId(sol.id)}
+                      >
+                        Ver detalle
+                      </button>
+                    </td>
+                  </tr>
 
-                {altaPendiente === sol.id && (
-                  <tr className="alta-pendiente">
-                    <td colSpan={8}>
+                  {altaPendiente === sol.id && (
+                    <tr className="alta-pendiente">
+                      <td colSpan={9}>
                       <div className="alta-pendiente__cuerpo">
                         <strong>Para pasar a Alta hace falta justificar la prioridad.</strong>
 
@@ -328,6 +347,14 @@ export default function PanelCoordinador() {
             })}
           </tbody>
         </table>
+      )}
+
+      {detalle && (
+        <TicketDetail
+          ticket={detalle}
+          onClose={() => setDetalleId(null)}
+          onCambio={cargarSolicitudes}
+        />
       )}
     </div>
   );

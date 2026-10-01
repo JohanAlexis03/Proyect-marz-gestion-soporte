@@ -418,3 +418,22 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Panel del Coordinador: abrir el detalle de la solicitud */
+.btn-detalle {
+  padding: 5px 10px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-detalle:hover {
+  background: var(--primary);
+  color: #fff;
+}

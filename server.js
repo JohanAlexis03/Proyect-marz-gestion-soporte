@@ -554,7 +554,9 @@ app.get('/api/agentes', verificarSesion, async (req, res) => {
 });
 
 // PUT /api/solicitudes/:id/asignar · HU05
-app.put('/api/solicitudes/:id/asignar', verificarSesion, async (req, res) => {
+// Repartir la cola es decision del Coordinador (HU04); cualquier otro rol
+// quedaba pudiendo asignarse solicitudes con solo conocer el UUID.
+app.put('/api/solicitudes/:id/asignar', verificarCoordinador, async (req, res) => {
   const { id } = req.params;
   const { agente_id } = req.body;
 
@@ -602,6 +604,26 @@ app.post('/api/comentarios', verificarSesion, async (req, res) => {
   }
 
   try {
+    const { data: solicitudPrevia, error: errConsulta } = await supabase
+      .from('solicitudes')
+      .select('propietario_id')
+      .eq('id', solicitud_id)
+      .single();
+
+    if (errConsulta || !solicitudPrevia) {
+      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    }
+
+    // Autorizacion a nivel de objeto: el Solicitante solo comenta en las suyas.
+    // El Coordinador y el Agente trabajan sobre toda la cola, asi que no
+    // llevan este limite.
+    if (
+      req.usuario.rol === 'Solicitante' &&
+      solicitudPrevia.propietario_id !== req.usuario.id
+    ) {
+      return res.status(403).json({ error: 'Acceso denegado: esta solicitud no te pertenece' });
+    }
+
     const { data, error } = await supabase
       .from('comentarios')
       .insert({

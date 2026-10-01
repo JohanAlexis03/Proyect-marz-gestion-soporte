@@ -7,6 +7,16 @@ import AsignarAgente from './AsignarAgente';
 import ComentariosTrabajo from './ComentariosTrabajo';
 import './TicketDetail.css';
 
+// Mismo criterio que en ControlEstado: esto solo decide qué se muestra, el que
+// pone el límite de verdad es el backend. Si acá diverge, el usuario ve un 403.
+function leerRol() {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || '{}').rol || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function TicketDetail({ ticket, onClose, onCambio }) {
   const dialogRef = useRef(null);
 
@@ -129,10 +139,13 @@ export default function TicketDetail({ ticket, onClose, onCambio }) {
           )}
         </section>
 
-        {/* HU05: Asignar agente a la solicitud */}
-        <section className="detail__section">
-          <AsignarAgente solicitudId={ticket.id} agenteActualId={ticket.agente_id} />
-        </section>
+        {/* HU05: Asignar agente a la solicitud. Solo el Coordinador reparte la
+            cola; a los demás les quedaría un formulario que el backend rechaza. */}
+        {leerRol() === 'Coordinador' && (
+          <section className="detail__section">
+            <AsignarAgente solicitudId={ticket.id} agenteActualId={ticket.agente_id} />
+          </section>
+        )}
 
         {/* HU06: Comentarios de trabajo */}
         <section className="detail__section">
