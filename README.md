@@ -58,12 +58,15 @@ Sprint 2 (HU05 a HU08): asignación de agente, comentarios de trabajo entre el
 equipo, cambio de estado según el rol y reapertura de una solicitud indicando
 el motivo.
 
+Sprint 3 (HU09 y HU10): búsqueda con filtros por prioridad, categoría y
+estado, y tablero de indicadores para el coordinador.
+
 También desde el Sprint 2, subir una solicitud a prioridad Alta exige
 justificación y fecha objetivo. Vale tanto al crearla como al cambiarla desde
 el panel, y la fecha no puede ser anterior a hoy.
 
-Pendiente: HU09 y HU10 (búsqueda con filtros y tablero de indicadores) y
-HU11 y HU12 (acceso de solo lectura para el auditor y reporte).
+Pendiente: HU11 y HU12, el acceso de solo lectura para el auditor y el
+reporte.
 
 ## Estructura
 
