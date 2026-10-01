@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import TicketDetail from './TicketDetail';
+import BuscadorFiltros from './BuscadorFiltros';
+import DashboardIndicadores from './DashboardIndicadores';
 
 const API_BASE = '/api';
 
@@ -191,6 +193,12 @@ export default function PanelCoordinador() {
       {error && <div className="error-msg">{error}</div>}
       {mensajeExito && <div className="success-msg">{mensajeExito}</div>}
 
+      {/* HU10: Dashboard de Indicadores (Solo Coordinador) */}
+      <DashboardIndicadores />
+
+      {/* HU09: Buscador y Filtros */}
+      <BuscadorFiltros onBuscar={(resultados) => setSolicitudes(resultados)} />
+
       {/* Barra de Controles y Ordenamiento */}
       <div className="toolbar">
         <h3>Listado General de Solicitudes</h3>
@@ -250,7 +258,15 @@ export default function PanelCoordinador() {
                 <React.Fragment key={sol.id}>
                 <tr>
                   <td style={{ fontSize: '11px', wordBreak: 'break-all' }}>{sol.id}</td>
-                  <td><strong>{sol.titulo}</strong></td>
+                  <td>
+                    <strong
+                      style={{ cursor: 'pointer', color: '#2563eb' }}
+                      title="Clic para ver detalle"
+                      onClick={() => setSolicitudSeleccionada(sol)}
+                    >
+                      {sol.titulo}
+                    </strong>
+                  </td>
                   <td>{sol.descripcion}</td>
                   <td>{sol.categoria || 'General'}</td>
                   <td>{sol.estado}</td>
