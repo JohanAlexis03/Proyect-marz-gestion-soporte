@@ -529,6 +529,123 @@ app.patch('/api/solicitudes/:id/estado', verificarSesion, async (req, res) => {
   }
 });
 
+// ============================================================================
+// HU05 + HU06: asignar agente y comentarios de trabajo
+// El equipo dejo el frontend en la rama del Sprint 2 pero el backend en la del
+// Sprint 3; se trae aca para que el Sprint 2 quede funcional por si solo.
+// ============================================================================
+
+// GET /api/agentes · lista los usuarios con rol Agente
+app.get('/api/agentes', verificarSesion, async (req, res) => {
+  try {
+    const { data: agentes, error } = await supabase
+      .from('usuarios')
+      .select('id, email, rol')
+      .eq('rol', 'Agente');
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al consultar agentes: ' + error.message });
+    }
+
+    return res.json(agentes || []);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// PUT /api/solicitudes/:id/asignar · HU05
+app.put('/api/solicitudes/:id/asignar', verificarSesion, async (req, res) => {
+  const { id } = req.params;
+  const { agente_id } = req.body;
+
+  if (!agente_id) {
+    return res.status(400).json({ error: 'Debes seleccionar un agente válido.' });
+  }
+
+  try {
+    const asignado_por = req.usuario.id;
+
+    const { data, error } = await supabase
+      .from('solicitudes')
+      .update({
+        agente_id: agente_id,
+        asignado_por: asignado_por,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al asignar el agente: ' + error.message });
+    }
+
+    return res.json({
+      mensaje: 'Agente asignado exitosamente',
+      solicitud: normalizarFila(data),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// POST /api/comentarios · HU06
+app.post('/api/comentarios', verificarSesion, async (req, res) => {
+  const { solicitud_id, contenido } = req.body;
+  const autor_id = req.usuario.id;
+
+  if (!contenido || typeof contenido !== 'string' || !contenido.trim()) {
+    return res.status(400).json({ error: 'El contenido del comentario no puede estar vacío.' });
+  }
+
+  if (!solicitud_id) {
+    return res.status(400).json({ error: 'El ID de la solicitud es obligatorio.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('comentarios')
+      .insert({
+        solicitud_id: solicitud_id,
+        autor_id: autor_id,
+        contenido: contenido.trim(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al registrar comentario: ' + error.message });
+    }
+
+    return res.status(201).json({
+      mensaje: 'Comentario guardado exitosamente',
+      comentario: data,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// GET /api/solicitudes/:id/comentarios · HU06
+app.get('/api/solicitudes/:id/comentarios', verificarSesion, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from('comentarios')
+      .select('*')
+      .eq('solicitud_id', id)
+      .order('fecha_creacion', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: 'Error al obtener comentarios: ' + error.message });
+    }
+
+    return res.json(data || []);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor backend corriendo en http://localhost:${PORT}`);
 });
