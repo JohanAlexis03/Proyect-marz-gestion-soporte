@@ -154,12 +154,67 @@ app.post('/api/login', async (req, res) => {
 // Requiere sesión: el propietario sale del token, nunca de la cabecera.
 // ============================================================================
 const CATEGORIAS_VALIDAS = ['Hardware', 'Software', 'Redes'];
+const PRIORIDADES_VALIDAS = ['Baja', 'Media', 'Alta'];
+
+// ---------------------------------------------------------------------------
+// Cambio controlado (Inicio del Sprint 2): prioridad Alta exige justificacion
+// y fecha objetivo. Aplica a los dos puntos de entrada de la prioridad, la
+// HU02 (crear) y la HU04 (reclasificar), asi no queda una via sin control.
+// ---------------------------------------------------------------------------
+const esFechaValida = (valor) => {
+  if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [anio, mes, dia] = valor.split('-').map(Number);
+  const fecha = new Date(anio, mes - 1, dia);
+  return fecha.getFullYear() === anio && fecha.getMonth() === mes - 1 && fecha.getDate() === dia;
+};
+
+// Fecha local en AAAA-MM-DD, para comparar igual que llega del formulario.
+const hoy = () => {
+  const ahora = new Date();
+  return new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+};
+
+// Devuelve el mensaje de error, o null si la prioridad Alta esta completa.
+const validarPrioridadAlta = (campos) => {
+  const justificacion = typeof campos.justificacion_prioridad === 'string'
+    ? campos.justificacion_prioridad.trim()
+    : '';
+
+  if (!justificacion) {
+    return 'La prioridad Alta exige indicar la justificacion.';
+  }
+  if (justificacion.length > 300) {
+    return 'La justificacion de la prioridad Alta no puede superar los 300 caracteres.';
+  }
+  if (!esFechaValida(campos.fecha_objetivo)) {
+    return 'La prioridad Alta exige una fecha objetivo con formato AAAA-MM-DD.';
+  }
+  if (campos.fecha_objetivo < hoy()) {
+    return 'La fecha objetivo no puede ser anterior a la fecha actual.';
+  }
+  return null;
+};
+
+// Si la prioridad es Alta devuelve los dos campos limpios; en cualquier otro
+// caso los vacia, porque la justificacion solo aplica a la prioridad Alta.
+const camposPrioridad = (prioridad, campos) => {
+  if (prioridad !== 'Alta') {
+    return { justificacion_prioridad: null, fecha_objetivo: null };
+  }
+  return {
+    justificacion_prioridad: campos.justificacion_prioridad.trim(),
+    fecha_objetivo: campos.fecha_objetivo,
+  };
+};
 
 app.post('/api/solicitudes', verificarSesion, async (req, res) => {
   const propietarioId = req.usuario.id;
   if (!propietarioId) return res.status(401).json({ error: 'Token sin identidad de usuario.' });
 
-  const { titulo, categoria, descripcion } = req.body || {};
+  const { titulo, categoria, descripcion, prioridad, justificacion_prioridad, fecha_objetivo } =
+    req.body || {};
 
   if (
     typeof titulo !== 'string' || !titulo.trim() ||
@@ -177,6 +232,22 @@ app.post('/api/solicitudes', verificarSesion, async (req, res) => {
     });
   }
 
+  // La prioridad se elegia solo en el panel de coordinacion; la HU02 ahora la
+  // recibe al crear, y si es Alta tiene que venir justificada (cambio controlado).
+  const prioridadFinal = prioridad || 'Media';
+  if (!PRIORIDADES_VALIDAS.includes(prioridadFinal)) {
+    return res.status(400).json({
+      error: `Prioridad no válida. Debe ser una de: ${PRIORIDADES_VALIDAS.join(', ')}`,
+    });
+  }
+
+  if (prioridadFinal === 'Alta') {
+    const errorPrioridad = validarPrioridadAlta({ justificacion_prioridad, fecha_objetivo });
+    if (errorPrioridad) return res.status(400).json({ error: errorPrioridad });
+  }
+
+  const camposAlta = camposPrioridad(prioridadFinal, { justificacion_prioridad, fecha_objetivo });
+
   try {
     const { data, error } = await supabase
       .from('solicitudes')
@@ -185,7 +256,8 @@ app.post('/api/solicitudes', verificarSesion, async (req, res) => {
         categoria,
         descripcion: descripcion.trim(),
         estado: 'Nuevo',
-        prioridad: 'Media',
+        prioridad: prioridadFinal,
+        ...camposAlta,
         historial: [],
         propietario_id: propietarioId,
         // fecha la genera la base de datos por defecto
@@ -247,10 +319,11 @@ const listarPropias = async (idPropietario, res) => {
   }
 };
 
-// El rol del token decide qué ve: Coordinador ve todas (HU04),
-// cualquier otro solo las suyas (HU03).
+// El rol del token decide qué ve: Coordinador y Agente ven todas (HU04 y
+// HU07, el agente necesita la cola para trabajarla), cualquier otro solo
+// las suyas (HU03).
 app.get('/api/solicitudes', verificarSesion, (req, res) => {
-  if (req.usuario.rol === 'Coordinador') return listarTodas(req, res); // HU04
+  if (['Coordinador', 'Agente'].includes(req.usuario.rol)) return listarTodas(req, res);
   return listarPropias(req.usuario.id, res); // HU03
 });
 
@@ -258,34 +331,46 @@ app.get('/api/solicitudes', verificarSesion, (req, res) => {
 // HU04: Cambiar prioridad de solicitud (Coordinador)
 // Guarda registro en texto simple en el historial
 // ============================================================================
-app.patch('/api/solicitudes/:id/prioridad', verificarCoordinador, async (req, res) => {
-  const { id } = req.params;
-  const { prioridad } = req.body;
+  app.patch('/api/solicitudes/:id/prioridad', verificarCoordinador, async (req, res) => {
+    const { id } = req.params;
+    const { prioridad, justificacion_prioridad, fecha_objetivo } = req.body || {};
 
-  const prioridadesValidas = ['Baja', 'Media', 'Alta'];
-  if (!prioridad || !prioridadesValidas.includes(prioridad)) {
-    return res.status(400).json({
-      error: `Prioridad no válida. Debe ser una de: ${prioridadesValidas.join(', ')}`,
-    });
-  }
-
-  try {
-    // 1. Obtener el historial previo de la solicitud
-    const { data: solicitudPrevia, error: errConsulta } = await supabase
-      .from('solicitudes')
-      .select('historial, prioridad')
-      .eq('id', id)
-      .single();
-
-    if (errConsulta || !solicitudPrevia) {
-      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    if (!prioridad || !PRIORIDADES_VALIDAS.includes(prioridad)) {
+      return res.status(400).json({
+        error: `Prioridad no válida. Debe ser una de: ${PRIORIDADES_VALIDAS.join(', ')}`,
+      });
     }
 
-    // 2. Formatear la nueva entrada
-    const marcaTiempo = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
-    const logRegistro = `[${marcaTiempo}] Prioridad actualizada de "${
-      solicitudPrevia.prioridad || 'N/A'
-    }" a "${prioridad}" por Coordinador (${req.usuario.email})`;
+    // Cambio controlado: subir a Alta desde el panel exige justificar y fijar
+    // fecha objetivo; sin eso la reclasificacion no se aplica.
+    if (prioridad === 'Alta') {
+      const errorPrioridad = validarPrioridadAlta({ justificacion_prioridad, fecha_objetivo });
+      if (errorPrioridad) return res.status(400).json({ error: errorPrioridad });
+    }
+
+    const camposAlta = camposPrioridad(prioridad, { justificacion_prioridad, fecha_objetivo });
+
+    try {
+      // 1. Obtener el historial previo de la solicitud
+      const { data: solicitudPrevia, error: errConsulta } = await supabase
+        .from('solicitudes')
+        .select('historial, prioridad')
+        .eq('id', id)
+        .single();
+
+      if (errConsulta || !solicitudPrevia) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+
+      // 2. Formatear la nueva entrada
+      const marcaTiempo = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+      let logRegistro = `[${marcaTiempo}] Prioridad actualizada de "${
+        solicitudPrevia.prioridad || 'N/A'
+      }" a "${prioridad}" por Coordinador (${req.usuario.email})`;
+      if (prioridad === 'Alta') {
+        logRegistro += ` · Justificacion: ${camposAlta.justificacion_prioridad} · Fecha objetivo: ${camposAlta.fecha_objetivo}`;
+      }
+
 
     let nuevoHistorial;
     if (Array.isArray(solicitudPrevia.historial)) {
@@ -305,10 +390,11 @@ app.patch('/api/solicitudes/:id/prioridad', verificarCoordinador, async (req, re
     // 3. Actualizar la prioridad y el historial en Supabase
     const { data: solicitudActualizada, error: errUpdate } = await supabase
       .from('solicitudes')
-      .update({
-        prioridad,
-        historial: nuevoHistorial,
-      })
+        .update({
+          prioridad,
+          ...camposAlta,
+          historial: nuevoHistorial,
+        })
       .eq('id', id)
       .select()
       .single();
@@ -319,6 +405,123 @@ app.patch('/api/solicitudes/:id/prioridad', verificarCoordinador, async (req, re
 
     return res.json({
       mensaje: 'Prioridad actualizada con éxito',
+      solicitud: normalizarFila(solicitudActualizada),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error interno en el servidor' });
+  }
+});
+
+// ============================================================================
+// HU07 + HU08: Cambiar el estado de una solicitud
+// HU07 avanza el flujo de atencion (Agente y Coordinador); HU08 acepta la
+// solucion o la reabre (Solicitante). Cada movimiento queda en el historial.
+// ============================================================================
+const ESTADOS_VALIDOS = ['Nuevo', 'En Progreso', 'Resuelto', 'Cerrado'];
+
+// Un rol solo puede mover la solicitud hacia los estados que le corresponden.
+const TRANSICIONES_POR_ROL = {
+  Coordinador: { Nuevo: ['En Progreso'], 'En Progreso': ['Resuelto'] },
+  Agente: { Nuevo: ['En Progreso'], 'En Progreso': ['Resuelto'] },
+  Solicitante: {
+    Resuelto: ['Cerrado', 'En Progreso'],
+    Cerrado: ['En Progreso'],
+  },
+};
+
+// Reabrir exige motivo escrito para que la traza quede completa (HU08).
+const requiereMotivo = (desde, hacia) =>
+  hacia === 'En Progreso' && (desde === 'Resuelto' || desde === 'Cerrado');
+
+app.patch('/api/solicitudes/:id/estado', verificarSesion, async (req, res) => {
+  const { id } = req.params;
+  const { estado, motivo } = req.body || {};
+  const rol = req.usuario.rol;
+
+  if (!estado || !ESTADOS_VALIDOS.includes(estado)) {
+    return res.status(400).json({
+      error: `Estado no valido. Debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}`,
+    });
+  }
+
+  const permitidas = TRANSICIONES_POR_ROL[rol];
+  if (!permitidas) {
+    return res.status(403).json({ error: 'Acceso denegado: tu rol no puede cambiar estados' });
+  }
+
+    try {
+      const { data: solicitudPrevia, error: errConsulta } = await supabase
+        .from('solicitudes')
+        .select('estado, historial, propietario_id')
+        .eq('id', id)
+        .single();
+
+      if (errConsulta || !solicitudPrevia) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+
+      // Autorizacion a nivel de objeto: el Solicitante solo mueve las suyas.
+      // Sin esto basta con conocer el UUID para aceptar o reabrir la solicitud
+      // de otro usuario (IDOR), aunque la lista filtrada no lo muestre.
+      if (rol === 'Solicitante' && solicitudPrevia.propietario_id !== req.usuario.id) {
+        return res.status(403).json({ error: 'Acceso denegado: esta solicitud no te pertenece' });
+      }
+
+      const desde = solicitudPrevia.estado || 'Nuevo';
+
+    if (estado === desde) {
+      return res.status(400).json({ error: 'La solicitud ya tiene ese estado' });
+    }
+
+    const destino = permitidas[desde];
+    if (!Array.isArray(destino) || !destino.includes(estado)) {
+      return res.status(400).json({
+        error: `Transicion no permitida: "${desde}" -> "${estado}"`,
+        transicionesPermitidas: destino || [],
+      });
+    }
+
+    const motivoLimpio = typeof motivo === 'string' ? motivo.trim() : '';
+    if (requiereMotivo(desde, estado) && !motivoLimpio) {
+      return res
+        .status(400)
+        .json({ error: 'Para reabrir la solicitud hace falta indicar el motivo' });
+    }
+
+    const marcaTiempo = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+    let logRegistro = `[${marcaTiempo}] Estado actualizado de "${desde}" a "${estado}" por ${rol} (${req.usuario.email})`;
+    if (motivoLimpio) {
+      logRegistro += ` · Motivo: ${motivoLimpio}`;
+    }
+
+    let nuevoHistorial;
+    if (Array.isArray(solicitudPrevia.historial)) {
+      nuevoHistorial = [
+        ...solicitudPrevia.historial,
+        {
+          fecha: new Date().toISOString().split('T')[0],
+          accion: logRegistro,
+        },
+      ];
+    } else if (typeof solicitudPrevia.historial === 'string' && solicitudPrevia.historial.trim()) {
+      nuevoHistorial = `${solicitudPrevia.historial}\n${logRegistro}`;
+    } else {
+      nuevoHistorial = logRegistro;
+    }
+
+    const { data: solicitudActualizada, error: errUpdate } = await supabase
+      .from('solicitudes')
+      .update({ estado, historial: nuevoHistorial })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (errUpdate) {
+      return res.status(500).json({ error: 'Error al actualizar la solicitud: ' + errUpdate.message });
+    }
+
+    return res.json({
+      mensaje: 'Estado actualizado con exito',
       solicitud: normalizarFila(solicitudActualizada),
     });
   } catch (err) {

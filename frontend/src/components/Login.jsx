@@ -37,6 +37,8 @@ export default function Login() {
         navigate('/coordinador');
       } else if (data.usuario.rol === 'Solicitante') {
         navigate('/');
+      } else if (data.usuario.rol === 'Agente') {
+        navigate('/agente');
       } else {
         navigate('/otro-rol');
       }

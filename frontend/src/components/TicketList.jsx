@@ -6,7 +6,12 @@ import { categoriaClase, estadoClase } from '../utils/badges';
 import TicketDetail from './TicketDetail';
 import './TicketList.css';
 
-export default function TicketList({ refreshKey }) {
+export default function TicketList({
+  refreshKey,
+  titulo = 'Mis solicitudes',
+  subtitulo,
+  textoVacio = 'Cuando crees tu primera solicitud de soporte, aparecerá aquí.',
+}) {
   const [tickets, setTickets] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [reloadKey, setReloadKey] = useState(0);
@@ -66,12 +71,12 @@ export default function TicketList({ refreshKey }) {
       <header className="card__header ticket-list__header">
         <div>
           <h2 id="ticket-list-title" className="card__title">
-            Mis solicitudes
+            {titulo}
           </h2>
           <p className="card__subtitle">
             {status === 'ready' && total > 0
               ? `${total} ${total === 1 ? 'solicitud registrada' : 'solicitudes registradas'}`
-              : 'Historial de soporte propio.'}
+              : subtitulo || 'Historial de soporte propio.'}
           </p>
         </div>
         <button
@@ -121,9 +126,7 @@ export default function TicketList({ refreshKey }) {
               <Inbox size={22} />
             </span>
             <h3 className="state__title">Aún no tienes solicitudes</h3>
-            <p className="state__text">
-              Cuando crees tu primera solicitud de soporte, aparecerá aquí.
-            </p>
+            <p className="state__text">{textoVacio}</p>
           </div>
         )}
 
@@ -188,7 +191,12 @@ export default function TicketList({ refreshKey }) {
       </div>
 
       {seleccionada && (
-        <TicketDetail ticket={seleccionada} onClose={() => setSelectedId(null)} />
+        <TicketDetail
+          ticket={seleccionada}
+          onClose={() => setSelectedId(null)}
+          // Al cambiar el estado (HU07/HU08) la lista se vuelve a pedir.
+          onCambio={handleReload}
+        />
       )}
     </section>
   );

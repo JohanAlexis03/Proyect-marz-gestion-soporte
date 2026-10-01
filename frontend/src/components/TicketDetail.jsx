@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 import { History, X } from 'lucide-react';
 import { formatFecha, formatFechaCorta } from '../utils/fecha';
 import { categoriaClase, estadoClase } from '../utils/badges';
+import ControlEstado from './ControlEstado';
 import './TicketDetail.css';
 
-export default function TicketDetail({ ticket, onClose }) {
+export default function TicketDetail({ ticket, onClose, onCambio }) {
   const dialogRef = useRef(null);
 
   useEffect(() => {
@@ -102,6 +103,9 @@ export default function TicketDetail({ ticket, onClose }) {
             </dd>
           </div>
         </dl>
+
+        {/* HU07 y HU08: cada rol ve solo las transiciones que le corresponden */}
+        <ControlEstado ticket={ticket} onCambio={onCambio} />
 
         <section className="detail__section">
           <h3 className="detail__subtitle">

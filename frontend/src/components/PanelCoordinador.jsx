@@ -44,8 +44,22 @@ export default function PanelCoordinador() {
     cargarSolicitudes();
   }, [sortBy, order]);
 
-  // Cambiar prioridad en vivo (HU04)
-  const handleCambioPrioridad = async (id, nuevaPrioridad) => {
+  // Cambio controlado (Inicio Sprint 2): subir a Alta exige justificacion y
+  // fecha objetivo. Elegir "Alta" no manda el PATCH al toque: abre la fila.
+  const [altaPendiente, setAltaPendiente] = useState(null);
+  const [justificacionAlta, setJustificacionAlta] = useState('');
+  const [fechaObjetivoAlta, setFechaObjetivoAlta] = useState('');
+  const [guardandoAlta, setGuardandoAlta] = useState(false);
+
+  const hoyISO = () => {
+    const ahora = new Date();
+    return new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+  };
+
+  // Devuelve { ok } para que quien pida la confirmacion sepa si cerro la fila.
+  const enviarPrioridad = async (id, nuevaPrioridad, extras = {}) => {
     setError('');
     setMensajeExito('');
 
@@ -56,7 +70,7 @@ export default function PanelCoordinador() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ prioridad: nuevaPrioridad })
+        body: JSON.stringify({ prioridad: nuevaPrioridad, ...extras })
       });
 
       const resultado = await resp.json();
@@ -72,9 +86,54 @@ export default function PanelCoordinador() {
 
       setMensajeExito(`Prioridad de la solicitud #${id} actualizada a "${nuevaPrioridad}" exitosamente.`);
       setTimeout(() => setMensajeExito(''), 4000);
+      return { ok: true };
     } catch (err) {
       setError(err.message);
+      return { ok: false };
     }
+  };
+
+  const handleCambioPrioridad = (id, nuevaPrioridad) => {
+    if (nuevaPrioridad === 'Alta') {
+      setAltaPendiente(id);
+      setJustificacionAlta('');
+      setFechaObjetivoAlta('');
+      setError('');
+      return;
+    }
+    setAltaPendiente(null);
+    return enviarPrioridad(id, nuevaPrioridad);
+  };
+
+  const confirmarAlta = async () => {
+    if (guardandoAlta) return;
+
+    if (!justificacionAlta.trim()) {
+      setError('La prioridad Alta exige indicar la justificacion.');
+      return;
+    }
+    if (justificacionAlta.trim().length > 300) {
+      setError('La justificacion de la prioridad Alta no puede superar los 300 caracteres.');
+      return;
+    }
+    if (!fechaObjetivoAlta) {
+      setError('La prioridad Alta exige indicar la fecha objetivo.');
+      return;
+    }
+    if (fechaObjetivoAlta < hoyISO()) {
+      setError('La fecha objetivo no puede ser anterior a la fecha actual.');
+      return;
+    }
+
+    setGuardandoAlta(true);
+    const resultado = await enviarPrioridad(altaPendiente, 'Alta', {
+      justificacion_prioridad: justificacionAlta.trim(),
+      fecha_objetivo: fechaObjetivoAlta,
+    });
+    setGuardandoAlta(false);
+
+    // Solo se cierra si el servidor acepto; si no, el error queda a la vista.
+    if (resultado.ok) setAltaPendiente(null);
   };
 
   const handleCerrarSesion = () => {
@@ -178,7 +237,8 @@ export default function PanelCoordinador() {
             {solicitudes.map((sol) => {
               const textoHistorial = formatearHistorial(sol.historial);
               return (
-                <tr key={sol.id}>
+                <React.Fragment key={sol.id}>
+                <tr>
                   <td style={{ fontSize: '11px', wordBreak: 'break-all' }}>{sol.id}</td>
                   <td><strong>{sol.titulo}</strong></td>
                   <td>{sol.descripcion}</td>
@@ -204,6 +264,66 @@ export default function PanelCoordinador() {
                     </div>
                   </td>
                 </tr>
+
+                {altaPendiente === sol.id && (
+                  <tr className="alta-pendiente">
+                    <td colSpan={8}>
+                      <div className="alta-pendiente__cuerpo">
+                        <strong>Para pasar a Alta hace falta justificar la prioridad.</strong>
+
+                        <div className="field">
+                          <label className="field__label" htmlFor={`justif-${sol.id}`}>
+                            Justificación <span className="field__required">*</span>
+                          </label>
+                          <textarea
+                            id={`justif-${sol.id}`}
+                            className="field__control field__control--textarea"
+                            rows={3}
+                            maxLength={300}
+                            placeholder="¿Por qué debe atenderse como prioritaria?"
+                            value={justificacionAlta}
+                            onChange={(e) => setJustificacionAlta(e.target.value)}
+                          />
+                          <span className="field__hint">{justificacionAlta.length}/300 caracteres.</span>
+                        </div>
+
+                        <div className="field">
+                          <label className="field__label" htmlFor={`fecha-${sol.id}`}>
+                            Fecha objetivo <span className="field__required">*</span>
+                          </label>
+                          <input
+                            id={`fecha-${sol.id}`}
+                            type="date"
+                            className="field__control"
+                            min={hoyISO()}
+                            value={fechaObjetivoAlta}
+                            onChange={(e) => setFechaObjetivoAlta(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="alta-pendiente__acciones">
+                          <button
+                            type="button"
+                            className="btn btn--primary"
+                            onClick={confirmarAlta}
+                            disabled={guardandoAlta}
+                          >
+                            {guardandoAlta ? 'Guardando…' : 'Confirmar prioridad Alta'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => setAltaPendiente(null)}
+                            disabled={guardandoAlta}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>

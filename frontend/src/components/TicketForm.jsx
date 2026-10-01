@@ -4,8 +4,25 @@ import { API_SOLICITUDES } from '../api';
 import './TicketForm.css';
 
 const CATEGORIES = ['Hardware', 'Software', 'Redes'];
+const PRIORITIES = ['Baja', 'Media', 'Alta'];
 
-const INITIAL_FORM = { titulo: '', categoria: '', descripcion: '' };
+// Fecha local en AAAA-MM-DD: toISOString() da UTC y aca (UTC-5) puede caer
+// en el día anterior antes de las 5 de la mañana.
+const hoyISO = () => {
+  const ahora = new Date();
+  return new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+};
+
+const INITIAL_FORM = {
+  titulo: '',
+  categoria: '',
+  descripcion: '',
+  prioridad: 'Media',
+  justificacion: '',
+  fechaObjetivo: '',
+};
 
 export default function TicketForm({ onTicketCreated }) {
   const [form, setForm] = useState(INITIAL_FORM);
@@ -23,10 +40,31 @@ export default function TicketForm({ onTicketCreated }) {
     event.preventDefault();
     if (loading) return;
 
-    const { titulo, categoria, descripcion } = form;
+    const { titulo, categoria, descripcion, prioridad, justificacion, fechaObjetivo } = form;
     if (!titulo.trim() || !categoria || !descripcion.trim()) {
       setError('Completa los tres campos obligatorios.');
       return;
+    }
+
+    // Cambio controlado: la prioridad Alta no se registra sin justificacion
+    // ni fecha objetivo, y se avisa aca mismo en lugar de fallar en el servidor.
+    if (prioridad === 'Alta') {
+      if (!justificacion.trim()) {
+        setError('La prioridad Alta requiere una justificación.');
+        return;
+      }
+      if (justificacion.trim().length > 300) {
+        setError('La justificación de la prioridad Alta no puede superar los 300 caracteres.');
+        return;
+      }
+      if (!fechaObjetivo) {
+        setError('La prioridad Alta requiere una fecha objetivo.');
+        return;
+      }
+      if (fechaObjetivo < hoyISO()) {
+        setError('La fecha objetivo no puede ser anterior a la fecha actual.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -45,6 +83,13 @@ export default function TicketForm({ onTicketCreated }) {
           titulo: titulo.trim(),
           categoria,
           descripcion: descripcion.trim(),
+          prioridad,
+          ...(prioridad === 'Alta'
+            ? {
+                justificacion_prioridad: justificacion.trim(),
+                fecha_objetivo: fechaObjetivo,
+              }
+            : {}),
         }),
       });
 
@@ -129,10 +174,71 @@ export default function TicketForm({ onTicketCreated }) {
           </select>
         </div>
 
-        <div className="field">
-          <label className="field__label" htmlFor="descripcion">
-            Descripción <span className="field__required">*</span>
-          </label>
+          <div className="field">
+            <label className="field__label" htmlFor="prioridad">
+              Prioridad
+            </label>
+            <select
+              id="prioridad"
+              name="prioridad"
+              className="field__control field__control--select"
+              value={form.prioridad}
+              onChange={updateField('prioridad')}
+            >
+              {PRIORITIES.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+            <span className="field__hint">
+              La prioridad Alta pide justificación y fecha objetivo.
+            </span>
+          </div>
+
+          {form.prioridad === 'Alta' && (
+            <>
+              <div className="field">
+                <label className="field__label" htmlFor="justificacion">
+                  Justificación de la prioridad Alta{' '}
+                  <span className="field__required">*</span>
+                </label>
+                <textarea
+                  id="justificacion"
+                  name="justificacion"
+                  className="field__control field__control--textarea"
+                  placeholder="Explica por qué esta solicitud debe atenderse como prioritaria…"
+                  rows={3}
+                  value={form.justificacion}
+                  onChange={updateField('justificacion')}
+                  maxLength={300}
+                />
+                <span className="field__hint">
+                  {form.justificacion.length}/300 caracteres.
+                </span>
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="fechaObjetivo">
+                  Fecha objetivo <span className="field__required">*</span>
+                </label>
+                <input
+                  id="fechaObjetivo"
+                  name="fechaObjetivo"
+                  type="date"
+                  className="field__control"
+                  value={form.fechaObjetivo}
+                  onChange={updateField('fechaObjetivo')}
+                  min={hoyISO()}
+                />
+              </div>
+            </>
+          )}
+
+          <div className="field">
+            <label className="field__label" htmlFor="descripcion">
+              Descripción <span className="field__required">*</span>
+            </label>
           <textarea
             id="descripcion"
             name="descripcion"

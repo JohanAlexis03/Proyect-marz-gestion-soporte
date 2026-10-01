@@ -161,6 +161,11 @@
   align-items: start;
 }
 
+/* Vistas con un solo bloque (cola del Agente): ocupa todo el ancho */
+.app-layout--unica {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* Tablet / móvil: una sola columna */
 @media (max-width: 1024px) {
   .app-layout {
@@ -391,4 +396,25 @@ body {
   border-radius: 3px;
   max-height: 80px;
   overflow-y: auto;
+}
+
+/* Cambio controlado: fila de confirmacion antes de pasar a prioridad Alta */
+.alta-pendiente {
+  background: #fffdf5;
+}
+
+.alta-pendiente > td {
+  padding: 14px 16px;
+}
+
+.alta-pendiente__cuerpo {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+}
+
+.alta-pendiente__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

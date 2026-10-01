@@ -191,8 +191,32 @@
     grid-template-columns: 1fr;
   }
 
-  .detail__timeline-item {
-    flex-direction: column;
-    gap: 3px;
+    .detail__timeline-item {
+      flex-direction: column;
+      gap: 3px;
+    }
   }
+
+/* HU07 y HU08: acciones de cambio de estado */
+.control-estado__actual {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.control-estado__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.control-estado__motivo {
+  width: 100%;
+}
+
+.control-estado__botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
 }
